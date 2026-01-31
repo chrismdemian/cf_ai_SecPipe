@@ -92,7 +92,27 @@ Each finding includes the exact data flow path showing HOW an attacker could rea
    https://secpipe.chrismdemian.workers.dev/mcp
    ```
 3. Authenticate with GitHub when prompted
-4. Try: "Review this code for security issues: [paste code]"
+4. Use the tools with these prompts:
+
+**Step 1 - Submit code for review:**
+```
+Call submit_review with this code:
+
+app.get('/user', (req, res) => {
+  const id = req.query.id;
+  db.query(`SELECT * FROM users WHERE id = ${id}`);
+});
+```
+
+**Step 2 - Check progress (wait 30-60 seconds):**
+```
+Call check_status with reviewId "<id-from-step-1>"
+```
+
+**Step 3 - Get results (when status is "completed" or "awaiting_approval"):**
+```
+Call get_findings with reviewId "<id-from-step-1>"
+```
 
 ### Option 2: Run Locally
 
