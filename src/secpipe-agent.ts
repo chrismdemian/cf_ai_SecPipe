@@ -176,14 +176,16 @@ export class SecPipeAgent extends McpAgent<
           now
         );
 
-        // Start the workflow
+        // Start the workflow - pass the DO name so workflow can call back
+        const doName = this.ctx.id.name;
         const instance = await this.env.SECPIPE_WORKFLOW.create({
           id: reviewId,
           params: {
             reviewId,
             userId,
             code,
-            language: language || "auto"
+            language: language || "auto",
+            doName
           }
         });
 
