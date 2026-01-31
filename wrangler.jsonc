@@ -1,0 +1,62 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "secpipe",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-30",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Workers AI binding
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Durable Objects for MCP Agent state
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SECPIPE_AGENT",
+        "class_name": "SecPipeAgent"
+      }
+    ]
+  },
+
+  // SQLite migrations for Durable Objects
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SecPipeAgent"]
+    }
+  ],
+
+  // Workflows for async pipeline execution
+  "workflows": [
+    {
+      "name": "secpipe-pipeline",
+      "binding": "SECPIPE_WORKFLOW",
+      "class_name": "SecurityPipelineWorkflow"
+    }
+  ],
+
+  // KV for OAuth state management
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "PLACEHOLDER_KV_ID"
+    }
+  ],
+
+  // Static assets (landing page)
+  "assets": {
+    "directory": "public"
+  },
+
+  // Observability
+  "observability": {
+    "enabled": true
+  }
+
+  // Environment variables (set via wrangler secret)
+  // - GITHUB_CLIENT_ID
+  // - GITHUB_CLIENT_SECRET
+  // - AI_GATEWAY_ID (optional)
+}
