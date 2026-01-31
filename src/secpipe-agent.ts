@@ -176,8 +176,9 @@ export class SecPipeAgent extends McpAgent<
           now
         );
 
-        // Start the workflow - pass the DO name so workflow can call back
-        const doName = this.ctx.id.name;
+        // Start the workflow - pass the DO ID so workflow can call back
+        // Use toString() since McpAgent uses unique IDs, not named IDs
+        const doId = this.ctx.id.toString();
         const instance = await this.env.SECPIPE_WORKFLOW.create({
           id: reviewId,
           params: {
@@ -185,7 +186,7 @@ export class SecPipeAgent extends McpAgent<
             userId,
             code,
             language: language || "auto",
-            doName
+            doId
           }
         });
 
@@ -604,6 +605,11 @@ export class SecPipeAgent extends McpAgent<
   // Internal endpoint handlers (called by workflow)
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // Ensure database is initialized for internal calls from workflow
+    if (url.hostname === "internal") {
+      this.initializeDatabase();
+    }
 
     if (url.pathname === "/update-status" && request.method === "POST") {
       const { reviewId, status, currentStage } = (await request.json()) as {

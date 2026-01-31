@@ -39,7 +39,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
   PipelineParams
 > {
   async run(event: WorkflowEvent<PipelineParams>, step: WorkflowStep) {
-    const { reviewId, code, doName } = event.payload;
+    const { reviewId, code, doId } = event.payload;
 
     // Stage 1: Triage - Data flow mapping and risk identification
     const triage = await step.do(
@@ -49,13 +49,22 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
         timeout: "2 minutes"
       },
       async () => {
-        return await runTriageStage(this.env, code);
+        try {
+          console.log("Starting triage stage for review:", reviewId);
+          console.log("DO ID:", doId);
+          const result = await runTriageStage(this.env, code);
+          console.log("Triage completed successfully");
+          return result;
+        } catch (error) {
+          console.error("Triage stage failed:", error);
+          throw error;
+        }
       }
     );
 
     // Update review status
     await step.do("update-status-analyzing", async () => {
-      await this.updateReviewStatus(doName, reviewId, "analyzing", "dependency");
+      await this.updateReviewStatus(doId, reviewId, "analyzing", "dependency");
     });
 
     // Stage 2-5: Run specialist analyzers in parallel based on triage results
@@ -117,7 +126,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Update status
     await step.do("update-status-filtering", async () => {
-      await this.updateReviewStatus(doName, reviewId, "filtering", "reachability");
+      await this.updateReviewStatus(doId, reviewId, "filtering", "reachability");
     });
 
     // Stage 6: REACHABILITY FILTER - The key differentiator
@@ -156,12 +165,12 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Store findings and synthesis in DO storage
     await step.do("store-findings", async () => {
-      await this.storeFindings(doName, reviewId, filteredFindings, synthesis);
+      await this.storeFindings(doId, reviewId, filteredFindings, synthesis);
     });
 
     // Update status to awaiting approval
     await step.do("update-status-awaiting-approval", async () => {
-      await this.updateReviewStatus(doName, reviewId, "awaiting_approval", "approval");
+      await this.updateReviewStatus(doId, reviewId, "awaiting_approval", "approval");
     });
 
     // Stage 8: Wait for human approval (MCP elicitation)
@@ -175,7 +184,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
     if (!approval.approved || approval.findingIds.length === 0) {
       // User declined or no findings approved
       await step.do("update-status-completed-no-remediation", async () => {
-        await this.updateReviewStatus(doName, reviewId, "completed", undefined);
+        await this.updateReviewStatus(doId, reviewId, "completed", undefined);
       });
       return {
         status: "completed",
@@ -186,7 +195,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Update status to remediating
     await step.do("update-status-remediating", async () => {
-      await this.updateReviewStatus(doName, reviewId, "remediating", "remediation");
+      await this.updateReviewStatus(doId, reviewId, "remediating", "remediation");
     });
 
     // Get approved findings
@@ -213,12 +222,12 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Store remediations
     await step.do("store-remediations", async () => {
-      await this.storeRemediations(doName, reviewId, remediations);
+      await this.storeRemediations(doId, reviewId, remediations);
     });
 
     // Update final status
     await step.do("update-status-completed", async () => {
-      await this.updateReviewStatus(doName, reviewId, "completed", undefined);
+      await this.updateReviewStatus(doId, reviewId, "completed", undefined);
     });
 
     return {
@@ -229,13 +238,13 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
   }
 
   private async updateReviewStatus(
-    doName: string,
+    doIdStr: string,
     reviewId: string,
     status: string,
     currentStage: string | undefined
   ): Promise<void> {
     // Get the DO stub and call it to update status
-    const doId = this.env.SECPIPE_AGENT.idFromName(doName);
+    const doId = this.env.SECPIPE_AGENT.idFromString(doIdStr);
     const stub = this.env.SECPIPE_AGENT.get(doId);
 
     await stub.fetch(
@@ -248,12 +257,12 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
   }
 
   private async storeFindings(
-    doName: string,
+    doIdStr: string,
     reviewId: string,
     findings: Finding[],
     synthesis: SynthesisResult
   ): Promise<void> {
-    const doId = this.env.SECPIPE_AGENT.idFromName(doName);
+    const doId = this.env.SECPIPE_AGENT.idFromString(doIdStr);
     const stub = this.env.SECPIPE_AGENT.get(doId);
 
     await stub.fetch(
@@ -266,11 +275,11 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
   }
 
   private async storeRemediations(
-    doName: string,
+    doIdStr: string,
     reviewId: string,
     remediations: Remediation[]
   ): Promise<void> {
-    const doId = this.env.SECPIPE_AGENT.idFromName(doName);
+    const doId = this.env.SECPIPE_AGENT.idFromString(doIdStr);
     const stub = this.env.SECPIPE_AGENT.get(doId);
 
     await stub.fetch(

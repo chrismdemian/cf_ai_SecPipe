@@ -178,7 +178,7 @@ export interface PipelineParams {
   userId: string;
   code: string;
   language: string;
-  doName: string; // Durable Object name for callbacks
+  doId: string; // Durable Object ID (hex string) for callbacks
 }
 
 export interface PipelineState {
