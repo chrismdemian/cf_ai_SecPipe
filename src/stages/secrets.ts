@@ -17,11 +17,17 @@ export async function runSecretsStage(
     SECRETS_USER_PROMPT(code)
   );
 
-  const findings = parseJsonResponse<RawFinding[]>(response);
+  try {
+    const findings = parseJsonResponse<RawFinding[]>(response);
+    if (!Array.isArray(findings)) return [];
 
-  return findings.map((finding, index) => ({
-    ...finding,
-    id: finding.id || generateId(`sec-${index}`),
-    category: "secrets" as const
-  }));
+    return findings.map((finding, index) => ({
+      ...finding,
+      id: finding.id || generateId(`sec-${index}`),
+      category: "secrets" as const
+    }));
+  } catch (error) {
+    console.error("Secrets stage parse error:", error);
+    return [];
+  }
 }

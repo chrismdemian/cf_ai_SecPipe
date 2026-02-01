@@ -41,11 +41,17 @@ export async function runAuthStage(
     AUTH_USER_PROMPT(code, triageContext)
   );
 
-  const findings = parseJsonResponse<RawFinding[]>(response);
+  try {
+    const findings = parseJsonResponse<RawFinding[]>(response);
+    if (!Array.isArray(findings)) return [];
 
-  return findings.map((finding, index) => ({
-    ...finding,
-    id: finding.id || generateId(`auth-${index}`),
-    category: "auth" as const
-  }));
+    return findings.map((finding, index) => ({
+      ...finding,
+      id: finding.id || generateId(`auth-${index}`),
+      category: "auth" as const
+    }));
+  } catch (error) {
+    console.error("Auth stage parse error:", error);
+    return [];
+  }
 }

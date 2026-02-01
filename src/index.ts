@@ -19,6 +19,21 @@ interface SecPipeWorkerEnv {
   AI_GATEWAY_ID?: string;
 }
 
+// Custom handler that routes all MCP requests to a single shared DO
+async function handleMcpRequest(
+  request: Request,
+  env: SecPipeWorkerEnv,
+  ctx: ExecutionContext
+): Promise<Response> {
+  // Use a single shared DO for all users (demo mode)
+  // In production, you'd use the authenticated user's ID
+  const doId = env.SECPIPE_AGENT.idFromName("secpipe-shared");
+  const stub = env.SECPIPE_AGENT.get(doId);
+
+  // Forward the request to the DO
+  return stub.fetch(request);
+}
+
 // Main worker handler
 export default {
   async fetch(
@@ -28,9 +43,9 @@ export default {
   ): Promise<Response> {
     const url = new URL(request.url);
 
-    // Route /mcp to the SecPipe MCP Agent
+    // Route /mcp to the SecPipe MCP Agent (shared DO)
     if (url.pathname.startsWith("/mcp")) {
-      return SecPipeAgent.mount("/mcp", { binding: "SECPIPE_AGENT" }).fetch(request, env, ctx);
+      return handleMcpRequest(request, env, ctx);
     }
 
     // All other routes go to the GitHub handler (landing page, OAuth)

@@ -45,11 +45,17 @@ export async function runInjectionStage(
     INJECTION_USER_PROMPT(code, triageContext)
   );
 
-  const findings = parseJsonResponse<RawFinding[]>(response);
+  try {
+    const findings = parseJsonResponse<RawFinding[]>(response);
+    if (!Array.isArray(findings)) return [];
 
-  return findings.map((finding, index) => ({
-    ...finding,
-    id: finding.id || generateId(`inj-${index}`),
-    category: finding.category || ("injection" as const)
-  }));
+    return findings.map((finding, index) => ({
+      ...finding,
+      id: finding.id || generateId(`inj-${index}`),
+      category: finding.category || ("injection" as const)
+    }));
+  } catch (error) {
+    console.error("Injection stage parse error:", error);
+    return [];
+  }
 }
