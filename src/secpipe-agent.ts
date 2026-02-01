@@ -156,6 +156,9 @@ export class SecPipeAgent extends McpAgent<
       "Submit source code for async security analysis with reachability filtering. Returns a review ID to track progress.",
       SubmitReviewSchema.shape,
       async (args) => {
+        // Ensure database is initialized
+        this.initializeDatabase();
+
         const { code, language } = args;
         const userId = this.props?.userId || "anonymous";
 
@@ -226,7 +229,13 @@ export class SecPipeAgent extends McpAgent<
       "Check the current status and progress of a security review pipeline.",
       CheckStatusSchema.shape,
       async (args) => {
+        this.initializeDatabase();
         const { reviewId } = args;
+
+        // Debug: log the DO ID and check what reviews exist
+        console.log("check_status called in DO:", this.ctx.id.toString());
+        const allReviews = this.ctx.storage.sql.exec("SELECT id FROM reviews").toArray();
+        console.log("Reviews in this DO:", allReviews.map((r: unknown) => (r as {id: string}).id));
 
         const result = this.ctx.storage.sql
           .exec(
@@ -242,7 +251,7 @@ export class SecPipeAgent extends McpAgent<
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify({ error: "Review not found" })
+                text: JSON.stringify({ error: "Review not found", doId: this.ctx.id.toString(), reviewsInDO: allReviews.length })
               }
             ]
           };
