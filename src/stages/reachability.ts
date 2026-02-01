@@ -51,16 +51,20 @@ export async function runReachabilityFilter(
     reachabilityMap.set(result.id, result);
   }
 
-  // Issue #2 Fix: Categories that should ALWAYS be marked as reachable
+  // Issue #2 Fix: Categories and CWEs that should ALWAYS be marked as reachable
   // Secrets are always exploitable since they're exposed in code regardless of user input
   const alwaysReachableCategories = new Set(["secrets"]);
+  // CWE-798 = Use of Hard-coded Credentials - always a real vulnerability
+  const alwaysReachableCWEs = new Set(["CWE-798"]);
 
   // Merge raw findings with reachability analysis
   const findings: Finding[] = rawFindings.map((rawFinding) => {
     const reachability = reachabilityMap.get(rawFinding.id);
 
     // Force secrets to always be reachable - they're exposed in code
-    const isSecretsFinding = alwaysReachableCategories.has(rawFinding.category);
+    // Check both category AND CWE (hardcoded credentials can come from any analyzer)
+    const isSecretsFinding = alwaysReachableCategories.has(rawFinding.category) ||
+      (rawFinding.cweId && alwaysReachableCWEs.has(rawFinding.cweId));
 
     if (reachability) {
       return {
