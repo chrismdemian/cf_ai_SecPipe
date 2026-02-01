@@ -63,7 +63,21 @@ Respond with a JSON array of findings:
 
 If no injection issues are found, return an empty array: []
 
-Be specific about the injection type and attack vector.`;
+Be specific about the injection type and attack vector.
+
+## NOT Injection Vulnerabilities (Do Not Report)
+
+1. **os.getenv() / process.env** - Reading environment variables is SAFE
+   - Env vars are set by administrators, not attackers
+   - This is the CORRECT way to handle configuration
+
+2. **Parameterized queries** - cursor.execute("SELECT * WHERE id = ?", [val]) is SAFE
+
+3. **Constants and literals** - Hardcoded strings in queries are not injectable
+
+4. **Type-converted inputs** - int(user_input) sanitizes for numeric contexts
+
+5. **subprocess.run with list args** - subprocess.run(["cmd", user_val]) is SAFE (no shell)`;
 
 export const INJECTION_USER_PROMPT = (
   code: string,

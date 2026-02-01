@@ -124,22 +124,27 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
       ...secretsFindings
     ];
 
-    // Issue #3 Fix: Deduplicate findings by location + CWE
-    // Multiple analyzers may detect the same vulnerability
+    // Issue #3 Fix: Deduplicate findings by CWE + normalized snippet
+    // Multiple analyzers may detect the same vulnerability at slightly different lines
     const deduplicateFindings = (findings: RawFinding[]): RawFinding[] => {
       const seen = new Map<string, RawFinding>();
       const severityOrder: Record<string, number> = { critical: 1, high: 2, medium: 3, low: 4, info: 5 };
 
       for (const finding of findings) {
-        // Create a unique key based on startLine and CWE (or title as fallback)
-        // Using only startLine since endLine can vary between analyzers
-        const key = `${finding.location.startLine}:${finding.cweId || finding.title}`;
+        // Normalize the snippet by removing whitespace for comparison
+        const normalizedSnippet = finding.location.snippet
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 100); // Use first 100 chars to avoid minor differences
+
+        // Create key from CWE + normalized snippet (not line numbers which vary)
+        const key = `${finding.cweId || finding.title}:${normalizedSnippet}`;
 
         const existing = seen.get(key);
         if (!existing) {
           seen.set(key, finding);
         } else {
-          // Keep the finding with higher severity, or more specific category
+          // Keep the finding with higher severity
           const existingSeverity = severityOrder[existing.severity] || 5;
           const newSeverity = severityOrder[finding.severity] || 5;
           if (newSeverity < existingSeverity) {

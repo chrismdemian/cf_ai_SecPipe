@@ -84,7 +84,27 @@ For each input finding, add reachability analysis:
 - When in doubt about reachability, mark as REACHABLE (false negatives are worse than false positives)
 - A finding with sanitizers is NOT reachable if those sanitizers adequately address the vulnerability
 - Consider the SPECIFIC attack type - an XSS sanitizer doesn't help against SQL injection
-- Internal functions can still be reachable if called from public endpoints`;
+- Internal functions can still be reachable if called from public endpoints
+
+## NOT Vulnerabilities (Mark as NOT Reachable)
+
+These patterns are SAFE and should be marked isReachable: false:
+
+1. **os.getenv() / process.env** - Reading environment variables is the RECOMMENDED secure pattern
+   - Environment variables are configured by admins, NOT user input
+   - This is how you SHOULD handle secrets instead of hardcoding them
+   - Only mark as vulnerable if the env var value is used unsafely (e.g., passed to eval)
+
+2. **Standard library imports** - Importing subprocess, os, etc. is not itself a vulnerability
+   - Only vulnerable if user input flows into dangerous functions
+
+3. **Parameterized queries** - cursor.execute("SELECT * FROM x WHERE id = ?", [user_id]) is SAFE
+
+4. **HTML escaping** - html.escape(), markupsafe.escape() makes XSS not exploitable
+
+5. **Type-checked inputs** - int(user_input) before SQL prevents injection
+
+6. **Debug mode warnings** - app.run(debug=True) is informational, not exploitable remotely`;
 
 export const REACHABILITY_USER_PROMPT = (
   code: string,
