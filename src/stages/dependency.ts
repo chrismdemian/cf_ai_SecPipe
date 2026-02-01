@@ -7,6 +7,7 @@ import {
   parseJsonResponse,
   runAIAnalysis,
   generateId,
+  extractArrayFromResponse,
   type StageEnv
 } from "./utils";
 
@@ -32,15 +33,9 @@ export async function runDependencyStage(
   );
 
   try {
-    const findings = parseJsonResponse<RawFinding[]>(response);
+    const parsed = parseJsonResponse<unknown>(response);
+    const findings = extractArrayFromResponse<RawFinding>(parsed);
 
-    // Handle case where AI returns empty or non-array
-    if (!Array.isArray(findings)) {
-      console.log("Dependency stage: AI returned non-array, returning empty findings");
-      return [];
-    }
-
-    // Ensure each finding has a unique ID and required fields
     return findings.map((finding, index) => ({
       ...finding,
       id: finding.id || generateId(`dep-${index}`),
@@ -48,7 +43,6 @@ export async function runDependencyStage(
     }));
   } catch (error) {
     console.error("Dependency stage parse error:", error);
-    // Return empty array on parse failure - no dependencies found is valid
     return [];
   }
 }

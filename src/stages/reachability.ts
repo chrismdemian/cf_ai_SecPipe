@@ -3,7 +3,7 @@ import {
   REACHABILITY_SYSTEM_PROMPT,
   REACHABILITY_USER_PROMPT
 } from "../prompts/reachability";
-import { parseJsonResponse, runAIAnalysis, type StageEnv } from "./utils";
+import { parseJsonResponse, runAIAnalysis, extractArrayFromResponse, type StageEnv } from "./utils";
 
 interface ReachabilityResult {
   id: string;
@@ -38,10 +38,8 @@ export async function runReachabilityFilter(
 
   let reachabilityResults: ReachabilityResult[] = [];
   try {
-    const parsed = parseJsonResponse<ReachabilityResult[]>(response);
-    if (Array.isArray(parsed)) {
-      reachabilityResults = parsed;
-    }
+    const parsed = parseJsonResponse<unknown>(response);
+    reachabilityResults = extractArrayFromResponse<ReachabilityResult>(parsed);
   } catch (error) {
     console.error("Reachability parse error:", error);
     // Continue with empty results - all findings will be marked reachable

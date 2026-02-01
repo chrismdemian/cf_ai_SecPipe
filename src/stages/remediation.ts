@@ -7,6 +7,7 @@ import {
   parseJsonResponse,
   runAIAnalysis,
   generateId,
+  extractArrayFromResponse,
   type StageEnv
 } from "./utils";
 
@@ -48,7 +49,8 @@ export async function runRemediationStage(
     REMEDIATION_USER_PROMPT(code, findingsJson)
   );
 
-  const remediationResults = parseJsonResponse<RemediationResponse[]>(response);
+  const parsed = parseJsonResponse<unknown>(response);
+  const remediationResults = extractArrayFromResponse<RemediationResponse>(parsed);
 
   const now = Date.now();
 

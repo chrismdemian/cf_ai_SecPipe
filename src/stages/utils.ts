@@ -86,3 +86,27 @@ export function generateId(prefix: string = ""): string {
   const random = Math.random().toString(36).substring(2, 8);
   return prefix ? `${prefix}-${timestamp}-${random}` : `${timestamp}-${random}`;
 }
+
+// Safely extract array from AI response (handles both bare arrays and wrapped objects)
+export function extractArrayFromResponse<T>(parsed: unknown, possibleKeys: string[] = ['findings', 'results', 'data', 'items', 'remediations']): T[] {
+  if (Array.isArray(parsed)) {
+    return parsed as T[];
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    // Try each possible key
+    for (const key of possibleKeys) {
+      if (key in obj && Array.isArray(obj[key])) {
+        return obj[key] as T[];
+      }
+    }
+    // If it's a single object that looks like a finding, wrap it in an array
+    if ('id' in obj || 'title' in obj || 'findingId' in obj) {
+      return [parsed as T];
+    }
+  }
+
+  console.error("Could not extract array from response:", JSON.stringify(parsed).substring(0, 300));
+  return [];
+}

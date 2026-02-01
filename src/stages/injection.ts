@@ -7,6 +7,7 @@ import {
   parseJsonResponse,
   runAIAnalysis,
   generateId,
+  extractArrayFromResponse,
   type StageEnv
 } from "./utils";
 
@@ -48,9 +49,9 @@ export async function runInjectionStage(
   console.log("Injection stage AI response:", response.substring(0, 1000));
 
   try {
-    const findings = parseJsonResponse<RawFinding[]>(response);
+    const parsed = parseJsonResponse<unknown>(response);
+    const findings = extractArrayFromResponse<RawFinding>(parsed);
     console.log("Injection stage parsed findings:", findings.length);
-    if (!Array.isArray(findings)) return [];
 
     return findings.map((finding, index) => ({
       ...finding,

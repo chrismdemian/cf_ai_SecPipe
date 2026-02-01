@@ -4,6 +4,7 @@ import {
   parseJsonResponse,
   runAIAnalysis,
   generateId,
+  extractArrayFromResponse,
   type StageEnv
 } from "./utils";
 
@@ -42,8 +43,8 @@ export async function runAuthStage(
   );
 
   try {
-    const findings = parseJsonResponse<RawFinding[]>(response);
-    if (!Array.isArray(findings)) return [];
+    const parsed = parseJsonResponse<unknown>(response);
+    const findings = extractArrayFromResponse<RawFinding>(parsed);
 
     return findings.map((finding, index) => ({
       ...finding,
