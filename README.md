@@ -93,7 +93,7 @@ Try it in the [Cloudflare AI Playground](https://playground.ai.cloudflare.com/) 
 ### Option 1: Use Deployed Version (Recommended)
 
 1. Open [Cloudflare AI Playground](https://playground.ai.cloudflare.com/)
-2. Click "Configure MCP" and add this URL:
+2. Paste this URL into the MCP Servers section:
    ```
    https://secpipe.chrismdemian.workers.dev/mcp
    ```
@@ -226,14 +226,6 @@ src/
     ├── remediation.ts
     └── utils.ts          # AI helper functions
 ```
-
-## Technical Highlights
-
-- **Llama 3.3 70B**: State-of-the-art open model for security analysis
-- **Durable Workflows**: Pipeline survives Worker restarts, supports human-in-the-loop
-- **KV Storage**: Persistent state for reviews, findings, and remediations across sessions
-- **MCP Protocol**: Standard interface for AI tool integration
-- **Reachability Analysis**: Data flow tracing to eliminate false positives
 
 ## License
 
