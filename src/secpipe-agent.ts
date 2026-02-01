@@ -156,32 +156,29 @@ export class SecPipeAgent extends McpAgent<
       "Submit source code for async security analysis with reachability filtering. Returns a review ID to track progress.",
       SubmitReviewSchema.shape,
       async (args) => {
-        // Ensure database is initialized
-        this.initializeDatabase();
-
         const { code, language } = args;
         const userId = this.props?.userId || "anonymous";
 
         const reviewId = generateId("rev");
         const now = Date.now();
 
-        // Create review record
-        this.ctx.storage.sql.exec(
-          `
-          INSERT INTO reviews (id, user_id, code, language, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 'pending', ?, ?)
-        `,
-          reviewId,
+        // Store review in KV (shared across all sessions)
+        const review = {
+          id: reviewId,
           userId,
           code,
-          language || "auto",
-          now,
-          now
-        );
+          language: language || "auto",
+          status: "triaging",
+          currentStage: "triage",
+          createdAt: now,
+          updatedAt: now,
+          totalFindingsRaw: 0,
+          totalFindingsFiltered: 0,
+          noiseReductionPercent: 0
+        };
+        await this.env.OAUTH_KV.put(`review:${reviewId}`, JSON.stringify(review));
 
-        // Start the workflow - pass the DO ID so workflow can call back
-        // Use toString() since McpAgent uses unique IDs, not named IDs
-        const doId = this.ctx.id.toString();
+        // Start the workflow
         const instance = await this.env.SECPIPE_WORKFLOW.create({
           id: reviewId,
           params: {
@@ -189,23 +186,13 @@ export class SecPipeAgent extends McpAgent<
             userId,
             code,
             language: language || "auto",
-            doId
+            kvNamespace: "OAUTH_KV" // Tell workflow to use KV
           }
         });
 
         // Update review with workflow instance ID
-        this.ctx.storage.sql.exec(
-          `
-          UPDATE reviews SET workflow_instance_id = ?, status = 'triaging', current_stage = 'triage', updated_at = ?
-          WHERE id = ?
-        `,
-          instance.id,
-          Date.now(),
-          reviewId
-        );
-
-        // Broadcast status update via WebSocket
-        this.broadcastStatus(reviewId, "triaging", "triage");
+        review.workflowInstanceId = instance.id;
+        await this.env.OAUTH_KV.put(`review:${reviewId}`, JSON.stringify(review));
 
         return {
           content: [
@@ -229,43 +216,23 @@ export class SecPipeAgent extends McpAgent<
       "Check the current status and progress of a security review pipeline.",
       CheckStatusSchema.shape,
       async (args) => {
-        this.initializeDatabase();
         const { reviewId } = args;
 
-        // Debug: log the DO ID and check what reviews exist
-        console.log("check_status called in DO:", this.ctx.id.toString());
-        const allReviews = this.ctx.storage.sql.exec("SELECT id FROM reviews").toArray();
-        console.log("Reviews in this DO:", allReviews.map((r: unknown) => (r as {id: string}).id));
+        // Read from KV (shared across all sessions)
+        const reviewData = await this.env.OAUTH_KV.get(`review:${reviewId}`);
 
-        const result = this.ctx.storage.sql
-          .exec(
-            `
-          SELECT * FROM reviews WHERE id = ?
-        `,
-            reviewId
-          )
-          .toArray();
-
-        if (result.length === 0) {
+        if (!reviewData) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify({ error: "Review not found", doId: this.ctx.id.toString(), reviewsInDO: allReviews.length })
+                text: JSON.stringify({ error: "Review not found" })
               }
             ]
           };
         }
 
-        const review = result[0] as unknown as {
-          id: string;
-          status: string;
-          current_stage: string;
-          total_findings_raw: number;
-          total_findings_filtered: number;
-          noise_reduction_percent: number;
-          error: string;
-        };
+        const review = JSON.parse(reviewData);
 
         return {
           content: [
@@ -274,11 +241,11 @@ export class SecPipeAgent extends McpAgent<
               text: JSON.stringify({
                 reviewId: review.id,
                 status: review.status,
-                currentStage: review.current_stage,
+                currentStage: review.currentStage,
                 stats: {
-                  rawFindings: review.total_findings_raw,
-                  exploitableFindings: review.total_findings_filtered,
-                  noiseReductionPercent: review.noise_reduction_percent
+                  rawFindings: review.totalFindingsRaw || 0,
+                  exploitableFindings: review.totalFindingsFiltered || 0,
+                  noiseReductionPercent: review.noiseReductionPercent || 0
                 },
                 error: review.error || undefined
               })

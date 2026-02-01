@@ -31,6 +31,7 @@ interface WorkflowEnv {
   AI: Ai;
   SECPIPE_AGENT: DurableObjectNamespace;
   SECPIPE_WORKFLOW: Workflow;
+  OAUTH_KV: KVNamespace;
   AI_GATEWAY_ID?: string;
 }
 
@@ -39,7 +40,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
   PipelineParams
 > {
   async run(event: WorkflowEvent<PipelineParams>, step: WorkflowStep) {
-    const { reviewId, code, doId } = event.payload;
+    const { reviewId, code } = event.payload;
 
     // Stage 1: Triage - Data flow mapping and risk identification
     const triage = await step.do(
@@ -51,7 +52,6 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
       async () => {
         try {
           console.log("Starting triage stage for review:", reviewId);
-          console.log("DO ID:", doId);
           const result = await runTriageStage(this.env, code);
           console.log("Triage completed successfully");
           return result;
@@ -62,9 +62,9 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
       }
     );
 
-    // Update review status
+    // Update review status in KV
     await step.do("update-status-analyzing", async () => {
-      await this.updateReviewStatus(doId, reviewId, "analyzing", "dependency");
+      await this.updateReviewStatusKV(reviewId, "analyzing", "dependency");
     });
 
     // Stage 2-5: Run specialist analyzers in parallel based on triage results
@@ -126,7 +126,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Update status
     await step.do("update-status-filtering", async () => {
-      await this.updateReviewStatus(doId, reviewId, "filtering", "reachability");
+      await this.updateReviewStatusKV( reviewId, "filtering", "reachability");
     });
 
     // Stage 6: REACHABILITY FILTER - The key differentiator
@@ -165,12 +165,12 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Store findings and synthesis in DO storage
     await step.do("store-findings", async () => {
-      await this.storeFindings(doId, reviewId, filteredFindings, synthesis);
+      await this.storeFindingsKV( reviewId, filteredFindings, synthesis);
     });
 
     // Update status to awaiting approval
     await step.do("update-status-awaiting-approval", async () => {
-      await this.updateReviewStatus(doId, reviewId, "awaiting_approval", "approval");
+      await this.updateReviewStatusKV( reviewId, "awaiting_approval", "approval");
     });
 
     // Stage 8: Wait for human approval (MCP elicitation)
@@ -184,7 +184,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
     if (!approval.approved || approval.findingIds.length === 0) {
       // User declined or no findings approved
       await step.do("update-status-completed-no-remediation", async () => {
-        await this.updateReviewStatus(doId, reviewId, "completed", undefined);
+        await this.updateReviewStatusKV( reviewId, "completed", undefined);
       });
       return {
         status: "completed",
@@ -195,7 +195,7 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Update status to remediating
     await step.do("update-status-remediating", async () => {
-      await this.updateReviewStatus(doId, reviewId, "remediating", "remediation");
+      await this.updateReviewStatusKV( reviewId, "remediating", "remediation");
     });
 
     // Get approved findings
@@ -222,12 +222,12 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
 
     // Store remediations
     await step.do("store-remediations", async () => {
-      await this.storeRemediations(doId, reviewId, remediations);
+      await this.storeRemediationsKV( reviewId, remediations);
     });
 
     // Update final status
     await step.do("update-status-completed", async () => {
-      await this.updateReviewStatus(doId, reviewId, "completed", undefined);
+      await this.updateReviewStatusKV( reviewId, "completed", undefined);
     });
 
     return {
@@ -237,57 +237,46 @@ export class SecurityPipelineWorkflow extends WorkflowEntrypoint<
     };
   }
 
-  private async updateReviewStatus(
-    doIdStr: string,
+  // KV-based helper methods (shared across all sessions)
+  private async updateReviewStatusKV(
     reviewId: string,
     status: string,
     currentStage: string | undefined
   ): Promise<void> {
-    // Get the DO stub and call it to update status
-    const doId = this.env.SECPIPE_AGENT.idFromString(doIdStr);
-    const stub = this.env.SECPIPE_AGENT.get(doId);
-
-    await stub.fetch(
-      new Request("http://internal/update-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewId, status, currentStage })
-      })
-    );
+    const reviewData = await this.env.OAUTH_KV.get(`review:${reviewId}`);
+    if (reviewData) {
+      const review = JSON.parse(reviewData);
+      review.status = status;
+      review.currentStage = currentStage;
+      review.updatedAt = Date.now();
+      await this.env.OAUTH_KV.put(`review:${reviewId}`, JSON.stringify(review));
+    }
   }
 
-  private async storeFindings(
-    doIdStr: string,
+  private async storeFindingsKV(
     reviewId: string,
     findings: Finding[],
     synthesis: SynthesisResult
   ): Promise<void> {
-    const doId = this.env.SECPIPE_AGENT.idFromString(doIdStr);
-    const stub = this.env.SECPIPE_AGENT.get(doId);
+    // Store findings
+    await this.env.OAUTH_KV.put(`findings:${reviewId}`, JSON.stringify(findings));
 
-    await stub.fetch(
-      new Request("http://internal/store-findings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewId, findings, synthesis })
-      })
-    );
+    // Update review with stats
+    const reviewData = await this.env.OAUTH_KV.get(`review:${reviewId}`);
+    if (reviewData) {
+      const review = JSON.parse(reviewData);
+      review.totalFindingsRaw = synthesis.totalRaw;
+      review.totalFindingsFiltered = findings.filter(f => f.isReachable).length;
+      review.noiseReductionPercent = synthesis.noiseReductionPercent;
+      review.updatedAt = Date.now();
+      await this.env.OAUTH_KV.put(`review:${reviewId}`, JSON.stringify(review));
+    }
   }
 
-  private async storeRemediations(
-    doIdStr: string,
+  private async storeRemediationsKV(
     reviewId: string,
     remediations: Remediation[]
   ): Promise<void> {
-    const doId = this.env.SECPIPE_AGENT.idFromString(doIdStr);
-    const stub = this.env.SECPIPE_AGENT.get(doId);
-
-    await stub.fetch(
-      new Request("http://internal/store-remediations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewId, remediations })
-      })
-    );
+    await this.env.OAUTH_KV.put(`remediations:${reviewId}`, JSON.stringify(remediations));
   }
 }
